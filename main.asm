@@ -3,11 +3,18 @@
 		db "AB"
 		dw START,0,0,0,0,0,0
 		
-		INCLUDE "BIOS.ASM"
+		INCLUDE "bios.asm"
+
+SPRITEY: EQU 0
+SPRITEX: EQU 1
+SPRITEPAT: EQU 2
+SPRITEC: EQU 3
+
 
 START:
 		CALL INITSCR
 		CALL INITINT
+		CALL INITCHARS
 		CALL INITSPRITES
 		
 		LD A,0
@@ -105,7 +112,7 @@ INITSCR:
 		
 		LD A,(RG0SAV + 1)	; Load VDP reg 1 FROM BIOS mirror
 		AND %11111100	; Reset bits 1 (SIZE) and 0 (MAG)
-		OR 3			; Set bit 1 and 2 (16x16 sprites, magnified)
+		OR 1			; Set bit 0 (16x16 sprites, magnified)
 		LD B,A		
 		LD C,1			; Set VDP reg 1
 		CALL WRTVDP
@@ -221,8 +228,8 @@ MYINT:	; Code called from H.TIMI hook
 		CALL LDIRVM
 		
 		LD    DE,(GRPATR) ; Show the sprites
-        LD    HL,SPRITEATTR
-        LD    BC,16
+        LD    HL,SPRITEBUFFER
+        LD    BC,4
         CALL  LDIRVM
 		
 		; For timing, set the border color to black
@@ -236,9 +243,46 @@ MYINT:	; Code called from H.TIMI hook
 INITSPRITES:
 		LD    DE,(GRPPAT) ; Fill Sprite attribute table
 		LD    BC, 32
-		LD    HL,SPRITE
+		LD    HL,CHARBUFFER+64*8
 		CALL  LDIRVM	
+		
+
+		
+		LD IX, SPRITEBUFFER
+		LD (IX+SPRITEY), 50
+		LD (IX+SPRITEX), 50
+		LD (IX+SPRITEPAT), 1
+		LD (IX+SPRITEC), 15
+		INC IX
+		INC IX
+		INC IX
+		INC IX
+		
 		RET
+		
+; Copy char definition from ROM to RAM in current slot		
+INITCHARS:
+		LD BC, 2048
+		LD DE, CHARBUFFER
+		LD HL, (CGPNT+1)
+INITCHARLOOP:
+		PUSH BC
+		PUSH DE
+		LD A,(CGPNT)
+		CALL RDSLT
+		EI
+		POP DE
+		POP BC
+		LD (DE),A
+		INC DE
+		INC HL
+		DEC BC
+		LD A,B
+		OR C
+		JR NZ, INITCHARLOOP
+		RET
+		
+		
 		
 MOVE:   DB 0,0,0,0,0,1,0,1,1,1,1,1,2,2,2,2,3,3,3,3,2,2,2,2,1,1,1,1,1,0,1,0
 		DB 0,0,0,0,0,7,0,7,7,7,7,7,6,6,6,6,5,5,5,5,6,6,6,6,7,7,7,7,7,0,7,0,255
@@ -307,7 +351,7 @@ SINTAB8:
 		DB -5,-5,-5,-4,-4,-4,-4,-4,-4,-4,-3,-3,-3,-3,-3,-3,-3,-2,-2,-2,-2,-2,-2,-1,-1,-1,-1,-1,-1,0,0
 		DB 128
 		
-		INCLUDE "TILES.ASM"		
+		INCLUDE "tiles.asm"		
 
 		DS 0x8000-$
 		org 0xC000
@@ -317,5 +361,5 @@ OLDJIF:	DS VIRTUAL 2
 CHARPOSX: DS VIRTUAL 2
 SPRITEBUFFER: DS VIRTUAL 256
 COUNTER: DS VIRTUAL 1
-
+CHARBUFFER: DS VIRTUAL 2048
 
