@@ -2,61 +2,94 @@
 		org 0x4000
 		db "AB"
 		dw START,0,0,0,0,0,0
-
+		
 		INCLUDE "BIOS.ASM"
 
 START:
 		CALL INITSCR
 		CALL INITINT
+		CALL INITSPRITES
 		
-		LD DE, MOVE
-		LD HL, 256
-		LD (CHARPOSX), HL
-MAIN:
 		LD A,0
+		LD (COUNTER), A
 		LD (OLDJIF), A
+		LD HL, SINTAB32
+MAIN:			
+		CALL WAITVBL
+
+		LD A, (HL)	; Get value from sintab
+		AND  7		; Only use the first 3 bits
 		
-AGAIN:
+		LD C,A
+		
+		PUSH HL
+		
+		LD HL, TILEDATA.TILES
+		LD DE, MOVINGCHAR
+		LD A, (COUNTER)
+		AND 7
+		LD E,A
+		
+		LD B,8
+CHARLOOP:
+		LD A,C
+		CP 0
+		LD A, (HL)
+		JP Z, NOXLOOP
+		PUSH BC
+		LD B,C
+XLOOP:
+		RRCA
+		DJNZ XLOOP
+		POP BC
+
+NOXLOOP:		
+		LD (DE), A
+		INC HL
+		INC E
+		LD A,E
+		AND 7
+		LD E,A
+		
+		DJNZ CHARLOOP
+			
+		
+		POP HL
+		
+NOCHANGE:
+		INC HL
+		; Did we reach the end of SINTAB32? Reset. TODO: Align sintab to 256 address boundary and only in L
+		LD A,128
+		CP (HL)
+		JP NZ, ENDLOOP
+		LD HL, SINTAB32
+
+ENDLOOP:		
+		LD A, (COUNTER)
+		INC A
+		LD (COUNTER), A
+		JP MAIN
+
+		
+		
+; Wait for Jiffy to change
+; IN: 
+; OUT:
+; CHANGES: A
+WAITVBL:
+  		PUSH HL
 		PUSH DE
-JIFFYLOOP:
+WAITLOOP:
 		LD HL,(JIFFY)	; Check if JIFFY is changed
 		LD DE,(OLDJIF)
-		LD (OLDJIF), HL
 		LD A,L
 		CP E
-		JP Z, JIFFYLOOP	; Zero? JIFFY has not changed
-
-		POP DE		
+		JP Z, WAITLOOP	; Zero? JIFFY has not changed
+		LD (OLDJIF), HL
+		POP DE
+		POP HL
+		RET
 		
-		LD HL, MOVINGCHAR
-		LD B,8
-HANDLECHAR:
-		LD A, (DE)
-		CP 0
-		JP Z, SKIPCHANGE
-
-		PUSH BC
-		LD B, A
-		LD A, (HL)
-LOOPLOOP:
-		RRCA
-		DJNZ LOOPLOOP
-		
-		POP BC
-		LD (HL), A
-
-SKIPCHANGE:		
-		INC HL
-		DJNZ HANDLECHAR
-		
-		INC DE
-		LD A, (DE)
-		CP 255
-		JP NZ, AGAIN
-		
-		LD DE, MOVE
-		JP AGAIN
-
 INITSCR:
 		; Set color 15,1,1
 		LD A,15			
@@ -72,7 +105,7 @@ INITSCR:
 		
 		LD A,(RG0SAV + 1)	; Load VDP reg 1 FROM BIOS mirror
 		AND %11111100	; Reset bits 1 (SIZE) and 0 (MAG)
-		OR 2			; Set bit 2 (SIZE, 16x16 sprites)
+		OR 3			; Set bit 1 and 2 (16x16 sprites, magnified)
 		LD B,A		
 		LD C,1			; Set VDP reg 1
 		CALL WRTVDP
@@ -187,7 +220,10 @@ MYINT:	; Code called from H.TIMI hook
 		LD HL, MOVINGCHAR
 		CALL LDIRVM
 		
-		
+		LD    DE,(GRPATR) ; Show the sprites
+        LD    HL,SPRITEATTR
+        LD    BC,16
+        CALL  LDIRVM
 		
 		; For timing, set the border color to black
 		ld a,0
@@ -197,18 +233,89 @@ MYINT:	; Code called from H.TIMI hook
 		
 		RET
 		
+INITSPRITES:
+		LD    DE,(GRPPAT) ; Fill Sprite attribute table
+		LD    BC, 32
+		LD    HL,SPRITE
+		CALL  LDIRVM	
+		RET
+		
 MOVE:   DB 0,0,0,0,0,1,0,1,1,1,1,1,2,2,2,2,3,3,3,3,2,2,2,2,1,1,1,1,1,0,1,0
 		DB 0,0,0,0,0,7,0,7,7,7,7,7,6,6,6,6,5,5,5,5,6,6,6,6,7,7,7,7,7,0,7,0,255
 			
-
+SPRITE:
+		DB 10101010b
+		DB 01010101b
+		DB 10101010b
+		DB 01010101b
+		DB 10101010b
+		DB 01010101b
+		DB 10101010b
+		DB 01010101b
+		
+		DB 10101010b
+		DB 01010101b
+		DB 10101010b
+		DB 01010101b
+		DB 10101010b
+		DB 01010101b
+		DB 10101010b
+		DB 01010101b
+		
+		DB 10101010b
+		DB 01010101b
+		DB 10101010b
+		DB 01010101b
+		DB 10101010b
+		DB 01010101b
+		DB 10101010b
+		DB 01010101b
+		
+		DB 10101010b
+		DB 01010101b
+		DB 10101010b
+		DB 01010101b
+		DB 10101010b
+		DB 01010101b
+		DB 10101010b
+		DB 01010101b
 	
+SPRITEATTR:
+		DB 10,0,0,15
+		DB 10,32,0,15
+		DB 10,64,0,15
+		DB 10,96,0,15
+
+SINTAB32:
+		DB 0,1,2,2,3,4,5,5,6,7,8,9,9,10,11,12,12,13,14,14,15,16,16,17,18,18,19,20,20,21,21,22,23
+		DB 23,24,24,25,25,26,26,27,27,27,28,28,29,29,29,30,30,30,30,31,31,31,31,31,32,32,32,32,32,32,32,32
+		DB 32,32,32,32,32,32,32,31,31,31,31,31,30,30,30,30,29,29,29,28,28,27,27,27,26,26,25,25,24,24,23,23
+		DB 22,21,21,20,20,19,18,18,17,16,16,15,14,14,13,12,12,11,10,9,9,8,7,6,5,5,4,3,2,2,1,0
+		DB -1,-2,-2,-3,-4,-5,-5,-6,-7,-8,-9,-9,-10,-11,-12,-12,-13,-14,-14,-15,-16,-16,-17,-18,-18,-19,-20,-20,-21,-21,-22,-23
+		DB -23,-24,-24,-25,-25,-26,-26,-27,-27,-27,-28,-28,-29,-29,-29,-30,-30,-30,-30,-31,-31,-31,-31,-31,-32,-32,-32,-32,-32,-32,-32,-32
+		DB -32,-32,-32,-32,-32,-32,-32,-31,-31,-31,-31,-31,-30,-30,-30,-30,-29,-29,-29,-28,-28,-27,-27,-27,-26,-26,-25,-25,-24,-24,-23,-23
+		DB -22,-21,-21,-20,-20,-19,-18,-18,-17,-16,-16,-15,-14,-14,-13,-12,-12,-11,-10,-9,-9,-8,-7,-6,-5,-5,-4,-3,-2,-2,-1
+		DB 128
+SINTAB8:
+		DB 0,0,0,1,1,1,1,1,1,2,2,2,2,2,2,3,3,3,3,3,3,3,4,4,4,4,4,4,4,5,5,5,5
+ 		DB 5,5,5,5,6,6,6,6,6,6,6,6,6,6,6,6,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7
+		DB 7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,6,6,6,6,6,6,6,6,6,6,6,6,5,5,5,5,5
+		DB 5,5,5,4,4,4,4,4,4,4,3,3,3,3,3,3,3,2,2,2,2,2,2,1,1,1,1,1,1,0,0,0
+		DB 0,0,-1,-1,-1,-1,-1,-1,-2,-2,-2,-2,-2,-2,-3,-3,-3,-3,-3,-3,-3,-4,-4,-4,-4,-4,-4,-4,-5,-5,-5,-5
+		DB -5,-5,-5,-5,-6,-6,-6,-6,-6,-6,-6,-6,-6,-6,-6,-6,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7
+		DB -7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-6,-6,-6,-6,-6,-6,-6,-6,-6,-6,-6,-6,-5,-5,-5,-5,-5
+		DB -5,-5,-5,-4,-4,-4,-4,-4,-4,-4,-3,-3,-3,-3,-3,-3,-3,-2,-2,-2,-2,-2,-2,-1,-1,-1,-1,-1,-1,0,0
+		DB 128
+		
 		INCLUDE "TILES.ASM"		
 
 		DS 0x8000-$
 		org 0xC000
-
-BUFFER: DS VIRTUAL 768
+MOVINGCHAR: DS VIRTUAL 8	
 OLDHK:	DS VIRTUAL 5
 OLDJIF:	DS VIRTUAL 2
-MOVINGCHAR: DS VIRTUAL 8	
 CHARPOSX: DS VIRTUAL 2
+SPRITEBUFFER: DS VIRTUAL 256
+COUNTER: DS VIRTUAL 1
+
+
