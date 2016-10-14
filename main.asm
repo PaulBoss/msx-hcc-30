@@ -13,9 +13,10 @@ SPRITEC: EQU 3
 
 START:
 		CALL INITSCR
-		CALL INITINT
 		CALL INITSPRITES
+		CALL INITINT
 		
+		; Initialize variables
 		LD A,0
 		LD (COUNTER), A
 		LD (COUNTER2), A
@@ -27,34 +28,34 @@ MAIN:
 		LD A, (HL)	; Get value from sintab
 		AND  7		; Only use the first 3 bits
 		
-		LD C,A
+		LD C,A		; Save sinus value in C
 		
 		PUSH HL
 		
 		LD HL, BANK_PATTERN_0
 		LD DE, MOVINGCHAR
-		LD A, (COUNTER)
+		LD A, (COUNTER)		;Set Y pos for copying to the moving BG Char
 		AND 7
-		LD E,A
+		LD E,A				; Y position in DE
 		
 		LD B,8
 CHARLOOP:
-		LD A,C
-		CP 0
+		LD A,C				; Get sinus value
+		CP 0				; 0? No change in X position
 		LD A, (HL)
 		JP Z, NOXLOOP
 		PUSH BC
-		LD B,C
+		LD B,C				; Rotate the bits X times
 XLOOP:
 		RRCA
 		DJNZ XLOOP
 		POP BC
 
 NOXLOOP:		
-		LD (DE), A
-		INC HL
-		INC E
-		LD A,E
+		LD (DE), A			; Set the current line in the moving BG char
+		INC HL				; Read from next line
+		INC E				; Write to next line
+		LD A,E				; Wrap Y value within the moving BG char definition
 		AND 7
 		LD E,A
 		
@@ -64,36 +65,36 @@ NOXLOOP:
 		POP HL
 		
 NOCHANGE:
-		LD B,5
-		LD IX, SPRITEBUFFER
-		LD IY, SPRITEATTR
+		LD B,5				; Change 5 sprites (30 jaar)
+		LD IX, SPRITEBUFFER	 
+		LD IY, SPRITEATTR	
 		
 		PUSH BC
 		PUSH HL
 SPRITEMOVELOOP:
-		LD A, (IY + SPRITEX)
-		SUB (HL)
-		LD (IX + SPRITEX), A
+		LD A, (IY + SPRITEX)	; Get current X value
+		SUB (HL)				; Subtract sinus value
+		LD (IX + SPRITEX), A	; Set current X value
 
 		PUSH BC
 		EX DE, HL
-		LD HL, SINTAB32
-		LD A, (COUNTER2)
+		LD HL, SINTAB32			
+		LD A, (COUNTER2)		; Get counter
 		LD C, A
-		LD A, (IY + SPRITEY)
+		LD A, (IY + SPRITEY)	; Get current Y value
 		LD B,0
 		
-		ADD HL, BC
-		LD B, (HL)
-		SRA B
-		SUB B
-		LD (IX + SPRITEY), A
+		ADD HL, BC				; Add counter to HL to get a second 
+		LD B, (HL)				; sinus value from the sintab
+		SRA B					; sinus value / 2
+		SUB B					; subtract the value from the Y position
+		LD (IX + SPRITEY), A	; set y position
 		EX DE, HL
 		POP BC
 		
 		
 		PUSH DE
-		LD DE, 4
+		LD DE, 4				; Jump to next sprite in memory
 		ADD IX, DE
 		ADD IY, DE
 		POP DE
@@ -103,20 +104,20 @@ SPRITEMOVELOOP:
 		POP HL
 
 		
-		LD IX, SPRITEBUFFER + 20
+		LD IX, SPRITEBUFFER + 20 ; Jump to balloon sprite definitions
 		LD B, 5
 		
 BALLOOP:
-		LD A, (IX)
+		LD A, (IX)				; get balloon Y position
+		DEC A					; Y = Y - 2
 		DEC A
-		DEC A
-		CP 208
+		CP 208					; Skip 208 to prevent sprites being disables
 		JP NZ, NOEXTRADEC
 		
 		DEC A
 NOEXTRADEC:
-		LD (IX), A
-		INC IX
+		LD (IX), A				; Set balloon Y position
+		INC IX					; IX = IX + 4 : Jump to next balloon
 		INC IX
 		INC IX
 		INC IX
@@ -131,11 +132,11 @@ NOEXTRADEC:
 		LD HL, SINTAB32
 
 ENDLOOP:		
-		LD A, (COUNTER)
+		LD A, (COUNTER)		; counter = counter + 1
 		INC A
 		LD (COUNTER), A
 		
-		LD A, (COUNTER2)
+		LD A, (COUNTER2)	; counter2 = counter2 + 2
 		INC A
 		INC A
 		LD (COUNTER2), A
@@ -162,6 +163,10 @@ WAITLOOP:
 		POP HL
 		RET
 		
+; Initialize the screen
+; IN:
+; OUT:
+; CHANGES: All
 INITSCR:
 		; Set color 15,1,1
 		LD A,15			
@@ -204,9 +209,12 @@ INITSCR:
 		LD HL, SCREEN
 		CALL LDIRVM
 		
-		
 		RET
-	
+
+; Install the the interupt hook
+; IN:
+; OUT:
+; Changes: All
 INITINT:
 		; Backup H.TIMI hook (VDP vblank interrupt)
 		LD HL, 0xFD9F	
@@ -221,20 +229,31 @@ INITINT:
 		LDIR
 		EI
 		RET
+
+; Initialize the sprites
+; IN: 
+; OUT:
+; Changes: All
+INITSPRITES:
+		LD    DE,(GRPPAT) ; Fill Sprite pattern table
+		LD    BC, 256
+		LD    HL, SPRITES 
+		CALL  LDIRVM	
+		
+		LD HL, SPRITEATTR ; Create copy of sptire attribtue table in RAM
+		LD DE, SPRITEBUFFER
+		LD BC, 40
+		LDIR
+		
+		RET
 		
 NEWHK:
 		JP MYINT
 		RET
 		RET
 		
-MYINT:	; Code called from H.TIMI hook
-
-		; For timing, set the border color to blue
-		ld a,4
-		out (0x99),a
-		ld a,7+128
-		out (0x99),a
-		
+; Code called from H.TIMI hook
+MYINT:	
 		; Copy "moving" background char to VDP
 		LD DE,(GRPCGP) ; 
 		LD BC,8
@@ -261,29 +280,9 @@ MYINT:	; Code called from H.TIMI hook
         LD    HL,SPRITEBUFFER
         LD    BC,40
         CALL  LDIRVM
-		
-		; For timing, set the border color to black
-		ld a,0
-		out (0x99),a
-		ld a,7+128
-		out (0x99),a
-		
-		RET
-		
-INITSPRITES:
-		LD    DE,(GRPPAT) ; Fill Sprite attribute table
-		LD    BC, 256
-		LD    HL, SPRITES 
-		CALL  LDIRVM	
-		
-		LD HL, SPRITEATTR
-		LD DE, SPRITEBUFFER
-		LD BC, 40
-		LDIR
-		
-		RET
-		
 				
+		RET
+		
 SPRITES:
 		; 3
 		DB 0xFF,0xFF,0xFF,0xFF,0x00,0x00,0xFF,0xFF
@@ -318,7 +317,7 @@ SPRITES:
 		DB 0xF0,0xC8,0xF4,0xF6,0xFE,0xFF,0xFF,0xFF
 		DB 0xFE,0xFE,0xFC,0xF8,0xE0,0xC0,0x80,0xC0
 		
-	
+; Initial sprite attributes
 SPRITEATTR:
 		DB 90,92,0,15
 		DB 90,128,4,15
@@ -334,8 +333,6 @@ SPRITEATTR:
 		DB 85, 50, 20, 6
 		DB 150, 140, 20, 6
 		
-
-		
 SINTAB32:
 		DB 0,1,2,2,3,4,5,5,6,7,8,9,9,10,11,12,12,13,14,14,15,16,16,17,18,18,19,20,20,21,21,22,23
 		DB 23,24,24,25,25,26,26,27,27,27,28,28,29,29,29,30,30,30,30,31,31,31,31,31,32,32,32,32,32,32,32,32
@@ -350,7 +347,9 @@ SINTAB32:
 		INCLUDE "tiles2.asm"
 		INCLUDE "screen2.asm"
 		
+		; Create a 16K ROM
 		DS 0xC000-$
+		; RAM
 		org 0xC000
 MOVINGCHAR: DS VIRTUAL 8	
 OLDHK:	DS VIRTUAL 5
